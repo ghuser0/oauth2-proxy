@@ -54,6 +54,11 @@ func newOIDCProvider(serverURL *url.URL) *OIDCProvider {
 			mockJWKS{},
 			&oidc.Config{ClientID: oidcClientID},
 		),
+		LogoutVerifier: oidc.NewLogoutVerifier(
+			oidcIssuer,
+			mockJWKS{},
+			&oidc.Config{ClientID: oidc.ClientID},
+		),
 	}
 
 	p := NewOIDCProvider(providerData)

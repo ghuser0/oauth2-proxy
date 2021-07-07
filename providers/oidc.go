@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"time"
@@ -230,6 +231,12 @@ func (p *OIDCProvider) CreateSessionFromToken(ctx context.Context, token string)
 	ss.ExpiresOn = &idToken.Expiry
 
 	return ss, nil
+}
+
+// GetBackchannelSignOutKey parses a backchannel request and extracts the sign out key
+// for single sign out
+func (p *OIDCProvider) GetBackchannelSignOutKey(req *http.Request) (string, error) {
+	return p.getOIDCBackchannelSignOutKey(req)
 }
 
 // createSession takes an oauth2.Token and creates a SessionState from it.

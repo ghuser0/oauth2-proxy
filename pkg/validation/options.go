@@ -102,10 +102,10 @@ func Validate(o *options.Options) error {
 			}
 		}
 
-		// Construct a manual IDTokenVerifier from issuer URL & JWKS URI
-		// instead of metadata discovery if we enable -skip-oidc-discovery.
-		// In this case we need to make sure the required endpoints for
-		// the provider are configured.
+		// Construct manual IDTokenVerifier and LogoutTokenVerifier from
+		// issuer URL & JWKS URI instead of metadata discovery if we enable
+		// -skip-oidc-discovery. In this case we need to make sure the
+		// required endpoints for the provider are configured.
 		if o.Providers[0].OIDCConfig.SkipDiscovery {
 			if o.Providers[0].LoginURL == "" {
 				msgs = append(msgs, "missing setting: login-url")
@@ -117,20 +117,24 @@ func Validate(o *options.Options) error {
 				msgs = append(msgs, "missing setting: oidc-jwks-url")
 			}
 			keySet := oidc.NewRemoteKeySet(ctx, o.Providers[0].OIDCConfig.JwksURL)
-			o.SetOIDCVerifier(oidc.NewVerifier(o.Providers[0].OIDCConfig.IssuerURL, keySet, &oidc.Config{
+			config := oidc.Config{
 				ClientID:        o.Providers[0].ClientID,
 				SkipIssuerCheck: o.Providers[0].OIDCConfig.InsecureSkipIssuerVerification,
-			}))
+			}
+			o.SetOIDCVerifier(oidc.NewVerifier(o.Providers[0].OIDCConfig.IssuerURL, keySet, &config))
+			o.SetOIDCLogoutVerifier(oidc.NewLogoutVerifier(o.Providers[0].OIDCConfig.IssuerURL, keySet, &config))
 		} else {
 			// Configure discoverable provider data.
 			provider, err := oidc.NewProvider(ctx, o.Providers[0].OIDCConfig.IssuerURL)
 			if err != nil {
 				return err
 			}
-			o.SetOIDCVerifier(provider.Verifier(&oidc.Config{
+			config := oidc.Config{
 				ClientID:        o.Providers[0].ClientID,
 				SkipIssuerCheck: o.Providers[0].OIDCConfig.InsecureSkipIssuerVerification,
-			}))
+			}
+			o.SetOIDCVerifier(provider.Verifier(&config))
+			o.SetOIDCLogoutVerifier(provider.LogoutVerifier(&config))
 
 			o.Providers[0].LoginURL = provider.Endpoint().AuthURL
 			o.Providers[0].RedeemURL = provider.Endpoint().TokenURL
@@ -216,6 +220,7 @@ func parseProviderInfo(o *options.Options, msgs []string) []string {
 	p.EmailClaim = o.Providers[0].OIDCConfig.EmailClaim
 	p.GroupsClaim = o.Providers[0].OIDCConfig.GroupsClaim
 	p.Verifier = o.GetOIDCVerifier()
+	p.LogoutVerifier = o.GetOIDCLogoutVerifier()
 
 	// TODO (@NickMeves) - Remove This
 	// Backwards Compatibility for Deprecated UserIDClaim option

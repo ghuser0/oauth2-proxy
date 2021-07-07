@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -29,6 +30,11 @@ var (
 	// ErrMissingOIDCVerifier is returned when a provider didn't set `Verifier`
 	// but an attempt to call `Verifier.Verify` was about to be made.
 	ErrMissingOIDCVerifier = errors.New("oidc verifier is not configured")
+
+	// ErrMissingOIDCLogoutVerifier is returned when a provider didn't set
+	// `LogoutVerifier` but an attempt to call `LogoutVerifier.Verify` was about
+	// to be made.
+	ErrMissingOIDCLogoutVerifier = errors.New("oidc logout verifier is not configured")
 
 	_ Provider = (*ProviderData)(nil)
 )
@@ -138,4 +144,10 @@ func (p *ProviderData) CreateSessionFromToken(ctx context.Context, token string)
 		return middleware.CreateTokenToSessionFunc(p.Verifier.Verify)(ctx, token)
 	}
 	return nil, ErrNotImplemented
+}
+
+// GetBackchannelSignOutKey parses a backchannel request and extracts the sign out key
+// for single sign out
+func (p *ProviderData) GetBackchannelSignOutKey(req *http.Request) (string, error) {
+	return p.getOIDCBackchannelSignOutKey(req)
 }

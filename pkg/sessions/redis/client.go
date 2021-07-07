@@ -12,6 +12,7 @@ type Client interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value []byte, expiration time.Duration) error
 	Del(ctx context.Context, key string) error
+	Eval(ctx context.Context, script string, keys []string, args ...interface{}) error
 }
 
 var _ Client = (*client)(nil)
@@ -36,6 +37,10 @@ func (c *client) Del(ctx context.Context, key string) error {
 	return c.Client.Del(ctx, key).Err()
 }
 
+func (c *client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) error {
+	return c.Client.Eval(ctx, script, keys, args).Err()
+}
+
 var _ Client = (*clusterClient)(nil)
 
 type clusterClient struct {
@@ -56,4 +61,8 @@ func (c *clusterClient) Set(ctx context.Context, key string, value []byte, expir
 
 func (c *clusterClient) Del(ctx context.Context, key string) error {
 	return c.ClusterClient.Del(ctx, key).Err()
+}
+
+func (c *clusterClient) Eval(ctx context.Context, script string, keys []string, args ...interface{}) error {
+	return c.ClusterClient.Eval(ctx, script, keys, args).Err()
 }

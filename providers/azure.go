@@ -145,12 +145,19 @@ func (p *AzureProvider) Redeem(ctx context.Context, redirectURL, code string) (*
 	created := time.Now()
 	expires := time.Unix(jsonResponse.ExpiresOn, 0)
 
+	signOutKeys, err := p.verifyTokenExtractSignOutKeys(ctx, jsonResponse.IDToken)
+	if err != nil {
+		// If there was any problem, ignore sign out keys
+		signOutKeys = nil
+	}
+
 	session := &sessions.SessionState{
 		AccessToken:  jsonResponse.AccessToken,
 		IDToken:      jsonResponse.IDToken,
 		CreatedAt:    &created,
 		ExpiresOn:    &expires,
 		RefreshToken: jsonResponse.RefreshToken,
+		SignOutKeys:  signOutKeys,
 	}
 
 	email, err := p.verifyTokenAndExtractEmail(ctx, session.IDToken)
@@ -237,6 +244,38 @@ func (p *AzureProvider) verifyTokenAndExtractEmail(ctx context.Context, token st
 	}
 
 	return email, nil
+}
+
+// verifyTokenExtractSignOutKeys extracts the sub and sid claims, if present, from the id token
+// It then formats the value of those claims in to sign out keys
+func (p *AzureProvider) verifyTokenExtractSignOutKeys(ctx context.Context, token string) ([]string, error) {
+	subject := ""
+	sessionID := ""
+	if token != "" && p.Verifier != nil {
+		token, err := p.Verifier.Verify(ctx, token)
+		// due to issues mentioned above, id_token may not be signed by AAD
+		if err == nil {
+			claims, err := p.getClaims(token)
+			if err == nil {
+				subject = claims.Subject
+				sessionID = claims.SessionID
+			} else {
+				logger.Printf("unable to get claims from token: %v", err)
+			}
+		} else {
+			logger.Printf("unable to verify token: %v", err)
+		}
+	}
+
+	signOutKeys := []string{}
+	if subject != "" {
+		signOutKeys = append(signOutKeys, "sub:" + subject)
+	}
+	if sessionID != "" {
+		signOutKeys = append(signOutKeys, "sid:" + sessionID)
+	}
+
+	return signOutKeys, nil
 }
 
 // RefreshSessionIfNeeded checks if the session has expired and uses the
@@ -364,4 +403,10 @@ func (p *AzureProvider) getEmailFromProfileAPI(ctx context.Context, accessToken 
 // ValidateSession validates the AccessToken
 func (p *AzureProvider) ValidateSession(ctx context.Context, s *sessions.SessionState) bool {
 	return validateToken(ctx, p, s.AccessToken, makeAzureHeader(s.AccessToken))
+}
+
+// GetBackchannelSignOutKey parses a backchannel request and extracts the sign out key
+// for single sign out
+func (p *AzureProvider) GetBackchannelSignOutKey(req *http.Request) (string, error) {
+	return p.getOIDCBackchannelSignOutKey(req)
 }

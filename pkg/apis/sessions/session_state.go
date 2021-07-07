@@ -30,6 +30,8 @@ type SessionState struct {
 	User              string   `msgpack:"u,omitempty"`
 	Groups            []string `msgpack:"g,omitempty"`
 	PreferredUsername string   `msgpack:"pu,omitempty"`
+
+	SignOutKeys       []string `msgpack:"sk,omitempty"`
 }
 
 // IsExpired checks whether the session has expired
@@ -69,6 +71,9 @@ func (s *SessionState) String() string {
 	if len(s.Groups) > 0 {
 		o += fmt.Sprintf(" groups:%v", s.Groups)
 	}
+	if len(s.SignOutKeys) > 0 {
+		o += fmt.Sprintf(" sign_out_keys:%v", len(s.SignOutKeys))
+	}
 	return o + "}"
 }
 
@@ -97,6 +102,10 @@ func (s *SessionState) GetClaim(claim string) []string {
 		return groups
 	case "preferred_username":
 		return []string{s.PreferredUsername}
+	case "sign_out_keys":
+		sign_out_keys := make([]string, len(s.SignOutKeys))
+		copy(sign_out_keys, s.SignOutKeys)
+		return sign_out_keys
 	default:
 		return []string{}
 	}

@@ -42,8 +42,10 @@ func (m *Manager) Save(rw http.ResponseWriter, req *http.Request, s *sessions.Se
 		}
 	}
 
-	err = tckt.saveSession(s, func(key string, val []byte, exp time.Duration) error {
-		return m.Store.Save(req.Context(), key, val, exp)
+	signOutKeys := s.GetClaim("sign_out_keys")
+
+	err = tckt.saveSession(s, func(ticketID string, val []byte, exp time.Duration) error {
+		return m.Store.Save(req.Context(), ticketID, signOutKeys, val, exp)
 	})
 	if err != nil {
 		return err
@@ -60,8 +62,8 @@ func (m *Manager) Load(req *http.Request) (*sessions.SessionState, error) {
 		return nil, err
 	}
 
-	return tckt.loadSession(func(key string) ([]byte, error) {
-		return m.Store.Load(req.Context(), key)
+	return tckt.loadSession(func(ticketID string) ([]byte, error) {
+		return m.Store.Load(req.Context(), ticketID)
 	})
 }
 
@@ -84,7 +86,13 @@ func (m *Manager) Clear(rw http.ResponseWriter, req *http.Request) error {
 	}
 
 	tckt.clearCookie(rw, req)
-	return tckt.clearSession(func(key string) error {
-		return m.Store.Clear(req.Context(), key)
+	return tckt.clearSession(func(ticketID string) error {
+		return m.Store.Clear(req.Context(), ticketID)
 	})
+}
+
+// ClearSignOutKey clears all saved session information for a given sign out key
+// from redis, which may match zero, one, or more sessions
+func (m *Manager) ClearSignOutKey(req *http.Request, signOutKey string) error {
+	return m.Store.ClearSignOutKey(req.Context(), signOutKey)
 }

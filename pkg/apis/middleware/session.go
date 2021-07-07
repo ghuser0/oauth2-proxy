@@ -24,6 +24,7 @@ func CreateTokenToSessionFunc(verify VerifyFunc) TokenToSessionFunc {
 			Email             string `json:"email"`
 			Verified          *bool  `json:"email_verified"`
 			PreferredUsername string `json:"preferred_username"`
+			SessionID         string `json:"sid"`
 		}
 
 		idToken, err := verify(ctx, token)
@@ -43,6 +44,14 @@ func CreateTokenToSessionFunc(verify VerifyFunc) TokenToSessionFunc {
 			return nil, fmt.Errorf("email in id_token (%s) isn't verified", claims.Email)
 		}
 
+		signOutKeys := []string{}
+		if claims.Subject != "" {
+			signOutKeys = append(signOutKeys, "sub:" + claims.Subject)
+		}
+		if claims.SessionID != "" {
+			signOutKeys = append(signOutKeys, "sid:" + claims.SessionID)
+		}
+
 		newSession := &sessionsapi.SessionState{
 			Email:             claims.Email,
 			User:              claims.Subject,
@@ -51,6 +60,7 @@ func CreateTokenToSessionFunc(verify VerifyFunc) TokenToSessionFunc {
 			IDToken:           token,
 			RefreshToken:      "",
 			ExpiresOn:         &idToken.Expiry,
+			SignOutKeys:       signOutKeys,
 		}
 
 		return newSession, nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
@@ -44,6 +45,7 @@ type ProviderData struct {
 	EmailClaim           string
 	GroupsClaim          string
 	Verifier             *oidc.IDTokenVerifier
+	LogoutVerifier       *oidc.LogoutTokenVerifier
 
 	// Universal Group authorization data structure
 	// any provider can set to consume
@@ -118,11 +120,12 @@ func defaultURL(u *url.URL, d *url.URL) *url.URL {
 
 // OIDCClaims is a struct to unmarshal the OIDC claims from an ID Token payload
 type OIDCClaims struct {
-	Subject  string   `json:"sub"`
-	Email    string   `json:"-"`
-	Groups   []string `json:"-"`
-	Verified *bool    `json:"email_verified"`
-	Nonce    string   `json:"nonce"`
+	Subject   string   `json:"sub"`
+	Email     string   `json:"-"`
+	Groups    []string `json:"-"`
+	Verified  *bool    `json:"email_verified"`
+	Nonce     string   `json:"nonce"`
+	SessionID string   `json:"sid"`
 
 	raw map[string]interface{}
 }
@@ -166,6 +169,14 @@ func (p *ProviderData) buildSessionFromClaims(idToken *oidc.IDToken) (*sessions.
 	verifyEmail := (p.EmailClaim == OIDCEmailClaim) && !p.AllowUnverifiedEmail
 	if verifyEmail && claims.Verified != nil && !*claims.Verified {
 		return nil, fmt.Errorf("email in id_token (%s) isn't verified", claims.Email)
+	}
+
+	ss.SignOutKeys = []string{}
+	if claims.Subject != "" {
+		ss.SignOutKeys = append(ss.SignOutKeys, "sub:" + claims.Subject)
+	}
+	if claims.SessionID != "" {
+		ss.SignOutKeys = append(ss.SignOutKeys, "sid:" + claims.SessionID)
 	}
 
 	return ss, nil
@@ -235,4 +246,37 @@ func (p *ProviderData) extractGroups(claims map[string]interface{}) []string {
 		groups = append(groups, formattedGroup)
 	}
 	return groups
+}
+
+func (p *ProviderData) getOIDCBackchannelSignOutKey(req *http.Request) (string, error) {
+	err := req.ParseForm()
+	if err != nil {
+		return "", fmt.Errorf("couldn't parse backchannel sign out request form: %v", err)
+	}
+
+	logoutTokenRaw := req.Form.Get("logout_token")
+	if logoutTokenRaw == "" {
+		return "", errors.New("logout_token form field not in backchannel sign out request")
+	}
+
+	if p.LogoutVerifier == nil {
+		return "", ErrMissingOIDCLogoutVerifier
+	}
+
+	logoutToken, err := p.LogoutVerifier.Verify(req.Context(), logoutTokenRaw)
+	if err != nil {
+		return "", fmt.Errorf("logout_token verification failed: %v", err)
+	}
+
+	// If a session ID was provided, use that as the basis of the sign out key
+	// for this request
+	if logoutToken.SessionId != "" {
+		return "sid:" + logoutToken.SessionId, nil
+	}
+	// Otherwise, according to the spec the subject must be provided, use that
+	if logoutToken.Subject != "" {
+		return "sub:" + logoutToken.Subject, nil
+	}
+
+	return "", errors.New("logout token did not contain `sid` or `sub` claims")
 }
